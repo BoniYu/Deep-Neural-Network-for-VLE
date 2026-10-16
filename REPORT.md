@@ -68,7 +68,7 @@ The measured $H_{vap}$ at each temperature was converted to J/mol (multiplied by
 - Slope $=$ _0.034_ (for a constant $\Delta H_{vap}$ it would be $1/R \approx 0.12$ mol K/J)
 - Intercept $=$ _9.37_
 
-_Add the plot here._ The points curve away from the fitted line, and the fit is worse than the $\ln P$ vs $1/T$ fit.
+_![Various enthaply of vaporization with changes in T](image-2.png)._ The points curve away from the fitted line, and the fit is worse than the $\ln P$ vs $1/T$ fit.
 
 ### 3.5 Observations
 
