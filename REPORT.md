@@ -84,11 +84,41 @@ All three fits use the full 57-point dataset for both fitting and evaluation, wi
 
 ## 4. Part 2: Vapor pressure of many compounds
 
+
 ### 4.1 Data and exploration
+
+The dataset contains vapor pressures of many compounds from the Korean Data Bank. Each row is one measurement, with the compound name, CAS number, formula, SMILES string, temperature `T` (in K), vapor pressure `Pvap` (in kPa), and the chemical class and subclass.
+
+- Each compound has measurements at several temperatures, so there are many more rows than compounds. _Add your counts: number of rows, number of unique compounds (the tutorial reports 1391), classes (17) and subclasses (53)._
+- **Temperature.** The distribution is roughly bell-shaped, peaking at about 350 to 400 K, with most data between about 200 and 700 K. The skewness is 0.32, so it is approximately symmetric with a slightly longer right tail (out to about 1100 K). A small group of rows lies at very low temperatures (about 0 to 30 K).
+- **Vapor pressure.** The raw distribution is extremely right-skewed (skewness 3.3): most values are close to zero with a long tail up to about 22,000 kPa.
+
+![Temp. Hist](image-4.png)
+[Pressure Hist](image-5.png)
 
 ### 4.2 Molecular fingerprints (SMILES to features)
 
+Each compound's SMILES string is converted into a molecular fingerprint: a vector of 2048 bits in which each bit marks the presence (1) or absence (0) of a substructure. The fingerprint depends only on the structure, so a compound has the same fingerprint at every temperature. It tells the model which compound's curve it is on, and temperature tells it where on that curve.
+
+The model input is the fingerprint plus the scaled temperature (2049 features). 
+
 ### 4.3 Log scaling of vapor pressure
+
+Following the Clausius-Clapeyron form, the target is $\ln P_{vap}$ instead of $P_{vap}$.
+
+| | Skewness |
+|---|---|
+| $P_{vap}$ (raw) | 3.3 |
+| $\ln P_{vap}$ | -1.57 |
+
+- The log compresses a range of about 0 to 22,000 kPa to about -27 to 10, making the bulk of the data visible.
+- The skew changes direction: instead of a long right tail, there is a long left tail of very low pressures. The distribution is also bimodal, with peaks near 4 and 7.
+- It is still skewed, so the transformation is not expected to make the target normal. Its purpose is to compress the range and match the physics.
+- Few data points lie at very low $\ln P$, so errors there may be larger. _To check when evaluating the model._
+
+_Add the $\ln P$ histogram here._![LnP](image-3.png)
+
+
 
 ### 4.4 Train / validation / test split
 
