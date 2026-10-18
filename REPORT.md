@@ -122,9 +122,58 @@ _Add the $\ln P$ histogram here._![LnP](image-3.png)
 
 ### 4.4 Train / validation / test split
 
+The data is split **by compound**, not by row. Each compound has measurements at many temperatures and one fixed fingerprint, so a random row split would put the same molecule in both train and test, and the test score would not show how the model handles new molecules.
+
+- The split is stratified by chemical class: within each of the 17 classes, the compounds are divided 80/20 into train+validation and test, and then the train+validation part is divided 80/20 into train and validation. Every class is therefore represented in all three sets.
+- The split is done on the list of unique compound names, and then every row of each compound follows it.
+
+| Set | Rows |
+|---|---|
+| Train | 26,310 |
+| Validation | 6,810 |
+| Test | 8,610 |
+| Total | 41,730 |
+
+The sets hold about 63%, 16% and 21% of the rows. They differ slightly from 64/16/20 because compounds have different numbers of temperature points.
+
+The temperature is standardized with a scaler fitted on the training set only, then applied to all three sets, to avoid data leakage.
+
+_Add your check that no compound appears in more than one set, and that all classes are in each set._
+
 ### 4.5 Neural network model
 
+**Inputs and target**
+- $X$ = fingerprint (2048 bits) plus scaled temperature, giving 2049 features per row.
+- $y$ = $\ln P_{vap}$, as a column of shape $(n, 1)$.
+
+| | $X$ shape | $y$ shape |
+|---|---|---|
+| Train | (26310, 2049) | (26310, 1) |
+| Validation | (6810, 2049) | (6810, 1) |
+| Test | (8610, 2049) | (8610, 1) |
+
+**Architecture** (PyTorch, a class inheriting from `nn.Module`)
+
+Linear(2049 → 20) → ReLU → Linear(20 → 20) → ReLU → Linear(20 → 1)
+
+- Two hidden layers of 20 neurons each, with ReLU activations.
+- No activation on the output layer, because $\ln P$ can be any real number.
+- Trainable parameters: $(2049 \times 20 + 20) + (20 \times 20 + 20) + (20 \times 1 + 1) = 41{,}441$.
+
+_Note: an early version of the class had a naming mistake (the third layer was assigned to `layer_1` and overwrote the first one), which gave only 441 parameters. Counting the parameters caught it._
+
 ### 4.6 Training and overfitting
+
+- Loss function: mean squared error. Optimizer: _your optimizer and learning rate (the tutorial uses Adam, 0.002)_.
+- Trained for 250 epochs on CPU, using the full training set in each epoch.
+
+_![Training and Validation Loss Vs epochs](image-6.png)_
+
+**Observations**
+- Both losses start at about 27 and decrease together for roughly the first 60 epochs.
+- The validation loss reaches its minimum of about 7 near epoch 145 and then slowly rises to about 8 by epoch 250, while the training loss keeps falling to about 2.
+- This growing gap is **overfitting**: after about epoch 145 the network is learning the training compounds rather than patterns that carry over to unseen compounds.
+- The remedy is early stopping, which stops training when the validation loss stops improving and restores the weights from the best epoch.
 
 ### 4.7 Early stopping
 
