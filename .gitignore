@@ -1,2 +1,10 @@
 .venv/
+__pycache__/
+.ipynb_checkpoints/
 data/
+
+# ignore model files by default, but keep the final one
+models/*
+!models/dnn_vle.pt
+!models/temperature_scaler.joblib
+!models/config.json

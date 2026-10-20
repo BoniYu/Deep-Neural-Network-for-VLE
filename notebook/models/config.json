@@ -1,0 +1,17 @@
+{
+  "in_dim": 2049,
+  "hidden_dim": 50,
+  "out_dim": 1,
+  "fingerprint": "topological",
+  "fingerprint_bits": 2048,
+  "target": "ln(P_vap), P in kPa",
+  "temperature_unit": "K, scaled with the saved scaler",
+  "learning_rate": 0.002,
+  "patience": 30,
+  "best_epoch": 159,
+  "val_MAE": 1.7128942012786865,
+  "val_RMSE": 2.4916046321975878,
+  "test_MAE": 1.634,
+  "test_RMSE": 2.516,
+  "test_R2": 0.642
+}
