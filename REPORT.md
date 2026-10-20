@@ -239,6 +239,15 @@ The selected model (hidden size 50, best-epoch weights) was evaluated **once** o
 
 _Error analysis to add: absolute error by chemical class, and a parity plot of predicted against true $\ln P$ (does the error concentrate at very low pressures, where there is little data?)._
 
+### 4.10 Error analysis
+
+The test errors are not evenly spread: the RMSE (2.52) is much larger than the MAE (1.63), so a minority of predictions carry very large errors. Details (parity plot, error against temperature, by chemical class, by pressure range) are in [ERROR_ANALYSIS.md](ERROR_ANALYSIS.md).
+
+- The model is accurate in the dense middle of the data (about 84% of test rows have true $\ln P$ between 0 and 10, with MAE 1.2 to 1.6).
+- Errors grow at very low pressures and temperatures, where there is little training data, and the model over-predicts the lowest pressures.
+- By class, Naphthenic Hydrocarbons, Ketones and Ethers are predicted best (MAE below 1.1), and Inorganics, Amides and Acids worst (MAE 2.4 to 4.8).
+- This supports adding a similarity-based warning to the planned app, so users know when a prediction is outside the region the model was trained on.
+
 ## 5. Extensions
 
 _To fill in._
