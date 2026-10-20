@@ -177,9 +177,67 @@ _![Training and Validation Loss Vs epochs](image-6.png)_
 
 ### 4.7 Early stopping
 
+The 250-epoch run showed overfitting. The training loss kept falling, but the validation loss reached its minimum (about 7) near epoch 145 and then rose.
+
+Early stopping was added to the training loop:
+- The **validation loss** is checked after every epoch.
+- A new best value saves a copy of the model weights (`copy.deepcopy(model.state_dict())`) and resets a counter. Otherwise the counter increases.
+- Training stops when the counter reaches the **patience**, 30 epochs.
+- The weights from the best epoch are loaded back, so the final model is the best one and not the last one.
+
+With patience 30, the hidden size 20 network stopped at epoch 178, and the best epoch was about 148 (validation loss about 7.3). This is consistent with the minimum seen in the full run.
+
+_Add the loss plot with early stopping here._
+
+**Mistakes made and fixed**
+- Reusing the model from a previous run meant training started from overfit weights. Each run needs a freshly created model, optimizer and stopper.
+- Passing the old model's parameters to the optimizer left the new model's weights unchanged and gave a flat loss. The model, the optimizer and the stopper must all refer to the same network.
+
 ### 4.8 Hyperparameter tuning
 
+The hidden size (neurons per hidden layer) was tuned over 3, 10, 20 and 50, with the two-hidden-layer architecture kept fixed. Every size started from a fresh model with the same seed, and was trained with the same learning rate (0.002), patience (30) and maximum of 250 epochs. Each size was judged on the **validation set** at its best epoch. The test set was not used.
+
+**Choice of metrics**
+
+MAE and RMSE, both computed on $\ln P_{vap}$, were chosen as the primary metrics. MAPE, used in the book, was kept as a secondary metric only.
+
+- The target is $\ln P$, which takes both negative and positive values and crosses zero. MAPE divides each error by the true value, so rows with $\ln P$ close to zero give huge percentage errors that dominate the average.
+- MAE and RMSE are in $\ln P$ units, so they have a direct meaning: an error of 1 corresponds to a factor of $e \approx 2.7$ in the pressure, wherever on the scale the point is.
+- RMSE penalizes large errors more than MAE does, so using both shows whether errors are evenly spread or concentrated.
+- The results confirm the problem with MAPE: it ranks size 50 last, while MSE, MAE and RMSE all rank it first.
+
+**Results (validation set, best epoch)**
+
+| Hidden size | Parameters | Stopped at epoch | Best epoch | Val MSE | Val MAE | Val RMSE | Val MAPE (%) |
+|---|---|---|---|---|---|---|---|
+| 3 | 6,166 | 249 | 249 | 11.19 | 2.514 | 3.345 | 122.7 |
+| 10 | 20,621 | 226 | 196 | 6.92 | 1.878 | 2.630 | 107.0 |
+| 20 | 41,441 | 176 | 146 | 6.82 | 1.865 | 2.612 | 107.6 |
+| 50 | 105,101 | 189 | 159 | 6.21 | 1.713 | 2.492 | 135.3 |
+
+**Observations**
+- Hidden size 50 is best by MSE, MAE and RMSE, and was selected.
+- Size 3 never triggered early stopping (best epoch 249): it was still improving at the 250-epoch limit, so it is underfit.
+- Sizes 10 and 20 are nearly identical. The differences between them are small and probably within the variation caused by random initialization, since each size was run with a single seed.
+- For comparison, the book's version trains every size for the full 250 epochs and ranks them by validation MAPE, which selected size 10 (validation MAPE 101.7).
+
 ### 4.9 Test performance
+
+The selected model (hidden size 50, best-epoch weights) was evaluated **once** on the test set, which contains compounds that were not seen in training or validation.
+
+| Metric | Validation | Test |
+|---|---|---|
+| MAE | 1.713 | 1.634 |
+| RMSE | 2.492 | 2.516 |
+| $R^2$ | not computed | 0.642 |
+| MAPE (secondary) | 135.3% | 146.6% |
+
+**Observations**
+- Test and validation errors agree closely, so the selection of the hidden size and the early stopping did not overfit the validation set.
+- A typical error is 1.63 in $\ln P$, which is a factor of about $e^{1.63} \approx 5$ in the pressure. The model explains about 64% of the variance in $\ln P$ for unseen compounds: useful for rough estimates, but not accurate enough for design calculations.
+- RMSE (2.52) is much larger than MAE (1.63), so a minority of predictions have very large errors.
+
+_Error analysis to add: absolute error by chemical class, and a parity plot of predicted against true $\ln P$ (does the error concentrate at very low pressures, where there is little data?)._
 
 ## 5. Extensions
 
