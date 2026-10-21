@@ -248,9 +248,39 @@ The test errors are not evenly spread: the RMSE (2.52) is much larger than the M
 - By class, Naphthenic Hydrocarbons, Ketones and Ethers are predicted best (MAE below 1.1), and Inorganics, Amides and Acids worst (MAE 2.4 to 4.8).
 - This supports adding a similarity-based warning to the planned app, so users know when a prediction is outside the region the model was trained on.
 
-## 5. Extensions
+## 5. Extensions: Comparison with tree-based models
 
-_To fill in._
+Tree-based regressors were fitted on the same inputs as the neural network (2048-bit fingerprint plus scaled temperature) and the same split by compound, to check whether the network is the best choice for this problem. Trees need no feature scaling, and the input was left as it was.
+
+### 5.1 Setup
+
+- **Models:** Decision Tree, Random Forest (`RandomForestRegressor`) and XGBoost (`XGBRegressor`), all with scikit-learn or library **default settings** and `random_state=42`. The target is $\ln P_{vap}$ (passed as a 1-D array).
+- **Selection:** the models were compared on the fixed **validation set** (compounds not used for fitting), using MAE and RMSE on $\ln P$ as the primary metrics, as for the network. The test set was not used.
+- **Planned tuning:** the best model will be tuned with `RandomizedSearchCV` and `GroupKFold` on the training set, with the compound name as the group, so that no compound appears in both the fitting and validation folds of a split. Ordinary k-fold would put rows of the same compound (which share one fingerprint) on both sides and reward memorizing molecules.
+
+### 5.2 Results with default settings (validation set)
+
+| Model | Valid MAE | Valid RMSE | Valid $R^2$ | Train MAE | Train RMSE | Train $R^2$ | Fit time (s) |
+|---|---|---|---|---|---|---|---|
+| Decision Tree | 1.745 | 2.742 | 0.553 | 0.002 | 0.071 | 0.9997 | 41 |
+| Random Forest | 1.437 | 2.255 | 0.698 | 0.315 | 0.582 | 0.981 | 252 |
+| **XGBoost** | **1.323** | **2.110** | **0.735** | 0.783 | 1.339 | 0.902 | **5.5** |
+| DNN, hidden size 50 (from section 4.8) | 1.713 | 2.492 | not computed | not computed | not computed | not computed | not recorded |
+
+### 5.3 Observations
+
+- **XGBoost is best** on all validation metrics and is also the fastest to fit (5.5 s, about 45 times faster than the forest), which makes it the practical choice to tune.
+- **The default decision tree overfits completely:** its training MAE is 0.002 against a validation MAE of 1.745. Averaging many trees reduces this (Random Forest: 1.437) and boosting reduces it further (XGBoost: 1.323).
+- **XGBoost also has the smallest gap between training and validation error,** even though it fits the training data less closely than the other two.
+- **Tree models outperform the neural network on this input.** The untuned XGBoost has a validation MAE of 1.32 against 1.71 for the tuned network, and an RMSE of 2.11 against 2.49. The network also took far more effort to train and tune. This is consistent with the general finding that tree ensembles are often as good or better than neural networks on tabular data of this size.
+- **Caveats:** these are single runs on one validation split with default settings, so small differences (for example between Random Forest and XGBoost) may be within the variation from the split. The network's size was tuned on this same validation set, while the tree models were not tuned at all, so the comparison, if anything, favors the network.
+
+_Open question to check: the decision tree's training RMSE (0.071) is far above its training MAE (0.002), so a few training rows are not fitted exactly. One possible reason is that different compounds with the same fingerprint and temperature cannot be separated by the tree (not tested)._
+
+### 5.4 Next steps
+
+1. Tune XGBoost with `GroupKFold` on the training set, and check the tuned model on the validation set.
+2. Evaluate all models **once** on the test set, in one table, after the choice has been made.
 
 ## 6. Conclusions and lessons learned
 
