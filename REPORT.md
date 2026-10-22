@@ -260,19 +260,23 @@ Tree-based regressors were fitted on the same inputs as the neural network (2048
 
 ### 5.2 Results with default settings (validation set)
 
+The DNN row was computed by loading the saved model (`models/dnn_vle.pt`) and passing it through the same metric function as the other models. Its validation MAE (1.713) and RMSE (2.492) reproduce the values from the hidden-size search, which confirms the saved model and the data preparation are consistent between notebooks.
+
 | Model | Valid MAE | Valid RMSE | Valid $R^2$ | Train MAE | Train RMSE | Train $R^2$ | Fit time (s) |
 |---|---|---|---|---|---|---|---|
-| Decision Tree | 1.745 | 2.742 | 0.553 | 0.002 | 0.071 | 0.9997 | 41 |
-| Random Forest | 1.437 | 2.255 | 0.698 | 0.315 | 0.582 | 0.981 | 252 |
-| **XGBoost** | **1.323** | **2.110** | **0.735** | 0.783 | 1.339 | 0.902 | **5.5** |
-| DNN, hidden size 50 (from section 4.8) | 1.713 | 2.492 | not computed | not computed | not computed | not computed | not recorded |
+| **XGBoost** | **1.323** | **2.110** | **0.735** | 0.783 | 1.339 | 0.902 | 4.5 |
+| Random Forest | 1.437 | 2.255 | 0.698 | 0.315 | 0.582 | 0.981 | 190 |
+| DNN (hidden size 50) | 1.713 | 2.492 | 0.631 | 0.741 | 1.360 | 0.898 | not measured |
+| Decision Tree | 1.745 | 2.742 | 0.553 | 0.002 | 0.071 | 0.9997 | 8 |
+
+Fit times are rough: repeating the same fits gave different times (for example 41 s and 8 s for the decision tree, and 252 s and 190 s for the forest), since they depend on what else the machine is doing. The times shown are from the second run.
 
 ### 5.3 Observations
 
-- **XGBoost is best** on all validation metrics and is also the fastest to fit (5.5 s, about 45 times faster than the forest), which makes it the practical choice to tune.
-- **The default decision tree overfits completely:** its training MAE is 0.002 against a validation MAE of 1.745. Averaging many trees reduces this (Random Forest: 1.437) and boosting reduces it further (XGBoost: 1.323).
-- **XGBoost also has the smallest gap between training and validation error,** even though it fits the training data less closely than the other two.
-- **Tree models outperform the neural network on this input.** The untuned XGBoost has a validation MAE of 1.32 against 1.71 for the tuned network, and an RMSE of 2.11 against 2.49. The network also took far more effort to train and tune. This is consistent with the general finding that tree ensembles are often as good or better than neural networks on tabular data of this size.
+- **XGBoost is best** on all validation metrics and is also the fastest of the ensembles to fit (a few seconds, against minutes for the forest), which makes it the practical choice to tune.
+- **The default decision tree overfits completely:** its training MAE is 0.002 against a validation MAE of 1.745. Averaging many trees reduces this (Random Forest: 1.437), and boosting reduces it further (XGBoost: 1.323).
+- **The DNN and XGBoost fit the training data about equally well** (training $R^2$ 0.898 and 0.902; training MAE 0.74 and 0.78), but XGBoost generalizes better to unseen compounds (validation MAE 1.32 against 1.71). The train-to-validation gap in MAE is about 0.97 for the DNN and 0.54 for XGBoost.
+- **Ranking by validation MAE:** XGBoost, Random Forest, DNN, Decision Tree. The network, with 105,101 parameters and a tuned size, performs between the forest and the single tree, and an untuned XGBoost beats it on MAE, RMSE and $R^2$.
 - **Caveats:** these are single runs on one validation split with default settings, so small differences (for example between Random Forest and XGBoost) may be within the variation from the split. The network's size was tuned on this same validation set, while the tree models were not tuned at all, so the comparison, if anything, favors the network.
 
 _Open question to check: the decision tree's training RMSE (0.071) is far above its training MAE (0.002), so a few training rows are not fitted exactly. One possible reason is that different compounds with the same fingerprint and temperature cannot be separated by the tree (not tested)._
