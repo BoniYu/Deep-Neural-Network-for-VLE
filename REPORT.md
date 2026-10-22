@@ -349,9 +349,66 @@ After all choices were fixed, every model was evaluated **once** on the test set
 - Results come from a single split, so the small difference between default and tuned XGBoost (0.04 in MAE) may not be significant. The larger gaps (XGBoost against the DNN) are more convincing.
 - A test $R^2$ of 0.78 means the best model explains about 78% of the variance in $\ln P$ for unseen compounds. It is a useful estimate, but not precise.
 - The error analysis in `ERROR_ANALYSIS.md` was done for the DNN only. _Open questions: does the tuned XGBoost make the same large errors (for example for 2-methyl-3-ethyl-1-pentene, very low pressures, and the weak classes), or are those specific to the network?_
+
+### 5.6 Error comparison of tuned XGBoost and the DNN (test set)
+
+The same error analysis as in `ERROR_ANALYSIS.md` was applied to the tuned XGBoost, and compared with the DNN row by row.
+
+- **Outlier compound:** 2-methyl-3-ethyl-1-pentene has a mean absolute error of 14.24 for the DNN and 6.90 for XGBoost. The failure is therefore not specific to the network, but it is about half as large for XGBoost. An error of 6.9 is still a factor of about 1,000 in pressure.
+- **By chemical class:** XGBoost has a lower MAE in 14 of 17 classes, a higher one in Ethers (-0.04) and Ketones (-0.10), and is level for Naphthenic Hydrocarbons. The weakest classes are the same for both models: Inorganics (DNN 4.77, XGBoost 2.88), Amides (3.68, 2.49), Acids (2.38, 1.87) and Other Nitrogen Derivatives (2.27, 1.55).
+- **By pressure range:**
+
+| True $\ln P$ | Rows | DNN MAE | XGB MAE | DNN bias | XGB bias |
+|---|---|---|---|---|---|
+| -30 to -10 | 125 | 6.97 | 5.90 | +6.52 | +5.39 |
+| -10 to -5 | 300 | 3.07 | 3.15 | +2.49 | +1.92 |
+| -5 to 0 | 928 | 2.07 | 1.97 | +0.58 | +1.04 |
+| 0 to 5 | 3,663 | 1.62 | 1.14 | -0.27 | +0.04 |
+| 5 to 10 | 3,594 | 1.23 | 0.81 | -0.08 | -0.48 |
+
+  Most of XGBoost's advantage comes from the two highest bins (84% of test rows), where its error is 30 to 34% lower. Below $\ln P = -5$ it gains little, and both models over-predict the lowest pressures.
+- **By compound:** XGBoost has the lower error for 62.7% of the test compounds. For the others the DNN is better, so the advantage is not universal.
+- **Fingerprint bits:** several of the compounds with the largest XGBoost errors are very small molecules with few set bits. Four of the worst 15 (phosphine, chlorotrifluoromethane, nitrogen and hydrogen sulfide) have a fingerprint of all zeros, so the model sees them as identical apart from temperature. Other bad cases have many bits (linoleic acid 15, 1,3,5-trinitrobenzene 12, 2-methyl-3-ethyl-1-pentene 8), so the bit count does not explain all the errors. _Not tested: the relationship between bit count and error over all test compounds, and the reason for the empty fingerprints (a likely one is that the topological torsion fingerprint needs paths of four bonded atoms, which very small molecules do not have)._
+
 ## 6. Conclusions and lessons learned
 
-_To fill in._
+### 6.1 Conclusions
+
+- **Task:** predict $\ln P_{vap}$ of pure compounds from a 2048-bit molecular fingerprint and temperature, and evaluate on compounds that were not seen in training, validation or tuning.
+- **Best model: tuned XGBoost**, with a test MAE of 1.230, RMSE of 1.968 and $R^2$ of 0.781. The DNN (hidden size 50) reached a test MAE of 1.634, RMSE of 2.516 and $R^2$ of 0.642. The tuned XGBoost reduces the MAE by about 25% and the RMSE by about 22%. In pressure terms, a typical error is a factor of about 3.4 for XGBoost and 5.1 for the DNN.
+- **The model family mattered more than tuning.** Changing from the DNN to XGBoost improved the test MAE by about 0.40, while tuning XGBoost improved it by about 0.04. A tuned network with 105,101 parameters performed only slightly better than a single decision tree.
+- **The ranking was the same on the validation and test sets** (tuned XGBoost, default XGBoost, Random Forest, DNN, Decision Tree), so the choices made on the validation set carried over to unseen compounds.
+- **Errors are concentrated in particular conditions and compounds.** The models work well in the dense part of the data ($\ln P$ between 0 and 10, about 84% of test rows) and fail at very low pressures, for unusual chemical classes (inorganics, amides, acids, nitrogen derivatives) and for individual compounds. A single compound (2-methyl-3-ethyl-1-pentene) accounts for roughly a third of the absolute error of its class for the DNN.
+- **The input representation is a likely limit.** Some of the worst-predicted compounds are small molecules with empty or nearly empty fingerprints, which the model cannot tell apart. Hyperparameter tuning gave only a small gain, so the remaining error probably comes mostly from the information in the inputs and the amount of similar data, not from the settings. This is a hypothesis supported by the error analysis, not something that was tested directly.
+- **Practical accuracy:** with a test $R^2$ of 0.78, the best model is useful for rough estimates and screening, but it is not accurate enough for design calculations.
+
+### 6.2 Lessons learned
+
+**Modelling**
+- Use the physics: modelling $\ln P$ instead of $P$, and $\ln P$ against $1/T$ in Part 1, turned a poor linear fit into an almost perfect one, and brought a range of 0 to 22,000 kPa down to a range a network can use.
+- **Split by what you want to generalize over.** All rows of a compound share a fingerprint, so the split was made by compound within each chemical class. A random row split would have put the same molecule in both train and test.
+- Fit anything learned from data (such as the temperature scaler) on the training set only, to prevent leakage.
+- Choose metrics on purpose. MAPE is misleading for a target that crosses zero ($\ln P$), and it ranked the models in the opposite order from MAE and RMSE. MAE and RMSE on $\ln P$ were used, with RMSE compared with MAE to show whether errors are concentrated.
+- Early stopping limits overfitting, but the best weights have to be restored, and the model, optimizer and stopper must all refer to the same network.
+- Compare several model families before tuning. A default XGBoost, fitted in seconds, already beat the tuned network.
+- Use `GroupKFold` by compound for cross-validation and tuning, so a compound never appears on both sides of a fold.
+- The test set was used once, after all decisions were made, and no model was changed afterwards.
+
+**Debugging and process**
+- Always compute $R^2$ and RMSE from the **measured data and the predictions at the real data points**. Scoring the model against points of its own fitted line gives a meaningless $R^2$ of 1.
+- Check shapes after every step (for example `X_train` at 26,310 × 2049, and `y` as a column). Mismatched arrays (building `X` from the full dataframe but `T` from the training dataframe) can fail quietly.
+- Several quiet bugs came from reusing variables between runs: training a model that had already been trained, an optimizer built from the old model's parameters (a perfectly flat loss), a stopper receiving a stale validation loss, and a loss compared against another model's predictions. After copying a cell, search it for the old names, and recreate the model, optimizer and stopper for every run.
+- Count the parameters by hand. A parameter count of 441 instead of 41,441 revealed a layer assigned to the wrong name.
+- Be suspicious of results that look too good, and read tracebacks from the bottom up.
+- Library versions matter: the book's code assumed an older pandas, and string columns backed by pyarrow broke `train_test_split`. The package is installed as `torch`, not `pytorch`, and `df.T` is the transpose, not the column named `T`. Pinning the versions (`pip freeze`) keeps the environment reproducible.
+- Keep reusable code in one place (the model class in `src/model.py`) and save everything a model needs to be reused: the weights, the fitted scaler and the settings.
+
+### 6.3 Further work
+
+- **Similarity score (applicability domain)** for new molecules, using Tanimoto similarity to the training compounds, with a warning for predictions outside the region the model was trained on. The empty fingerprints show a case where such a check would be needed.
+- **Streamlit app:** the user enters a SMILES string and a temperature and receives the predicted vapor pressure, with the similarity warning.
+- **Keras / TensorFlow version** of the same network, as a comparison of frameworks.
+- **Open questions:** how the number of set bits relates to the error over all compounds, why the outlier compound fails for both models, and whether a different representation of the molecule would change the results (any such change would be a new experiment, evaluated on validation data).
 
 ## 7. References
 
