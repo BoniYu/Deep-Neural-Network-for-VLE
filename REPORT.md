@@ -281,11 +281,74 @@ Fit times are rough: repeating the same fits gave different times (for example 4
 
 _Open question to check: the decision tree's training RMSE (0.071) is far above its training MAE (0.002), so a few training rows are not fitted exactly. One possible reason is that different compounds with the same fingerprint and temperature cannot be separated by the tree (not tested)._
 
-### 5.4 Next steps
+### 5.4 Hyperparameter tuning of XGBoost
 
-1. Tune XGBoost with `GroupKFold` on the training set, and check the tuned model on the validation set.
-2. Evaluate all models **once** on the test set, in one table, after the choice has been made.
+XGBoost was tuned because it had the best validation result with default settings and also the shortest fit time.
 
+**Method**
+- `RandomizedSearchCV` with 30 sampled combinations and **`GroupKFold` with 5 folds on the training set**, using the compound name as the group, so no compound appears in both the fitting and the scoring part of a fold. Ordinary k-fold would put rows of the same compound (which share one fingerprint) on both sides.
+- The winner was chosen by MAE (RMSE was recorded as well). The validation set and the test set were not used in the search.
+
+| Parameter | Search range |
+|---|---|
+| `n_estimators` | 200 to 1000 (integer) |
+| `learning_rate` | 0.02 to 0.3 (log scale) |
+| `max_depth` | 3 to 8 |
+| `min_child_weight` | 1 to 10 |
+| `subsample` | 0.6 to 1.0 |
+| `colsample_bytree` | 0.3 to 1.0 |
+| `reg_lambda` | 0.1 to 10 (log scale) |
+
+**Best parameters** (cross-validated MAE 1.298)
+
+| Parameter | Value |
+|---|---|
+| `n_estimators` | 400 |
+| `learning_rate` | 0.117 |
+| `max_depth` | 6 |
+| `min_child_weight` | 7 |
+| `subsample` | 0.732 |
+| `colsample_bytree` | 0.948 |
+| `reg_lambda` | 1.76 |
+
+**Validation results (fixed validation set)**
+
+| Model | Valid MAE | Valid RMSE | Valid $R^2$ | Train MAE | Train RMSE | Train $R^2$ |
+|---|---|---|---|---|---|---|
+| XGBoost (default) | 1.323 | 2.110 | 0.735 | 0.783 | 1.339 | 0.902 |
+| XGBoost (tuned) | 1.273 | 2.049 | 0.751 | 0.686 | 1.246 | 0.915 |
+
+**Observations**
+- Tuning gave a modest improvement: validation MAE fell by about 4%, RMSE by about 3%, and $R^2$ rose by 0.015. The gap between training and validation MAE barely changed (0.54 to 0.59), so the better fit did not come with noticeably more overfitting.
+- Most of the best values lie inside their ranges and close to the XGBoost defaults (depth 6, `reg_lambda` near 1, learning rate about 0.1). `colsample_bytree` ended near 1, so using fewer than almost all of the 2049 features per tree gave no benefit. `min_child_weight` (7, against a default of 1) is the main change, which makes the trees more conservative.
+- The cross-validated MAE (1.298) is close to the validation MAE (1.273), which suggests the result is not an artifact of one split. _Add the fold-to-fold standard deviation (`std_test_MAE`) here._
+- The hyperparameters are not the main limit on accuracy. Changing the model family mattered far more than tuning.
+
+The tuned model was saved to `models/xgb_tuned.json`, with its parameters and settings in `models/xgb_config.json`. Reloading it gave identical predictions.
+
+### 5.5 Test set evaluation
+
+After all choices were fixed, every model was evaluated **once** on the test set (8,610 rows, compounds not used in training, validation or tuning). No model was refitted or changed after seeing these numbers. The DNN row reproduces the test metrics from section 4.9, which confirms the test data are the same in both notebooks.
+
+| Model | Test MAE | Test RMSE | Test $R^2$ | Validation MAE |
+|---|---|---|---|---|
+| **XGBoost (tuned)** | **1.230** | **1.968** | **0.781** | 1.273 |
+| XGBoost (default) | 1.270 | 2.008 | 0.772 | 1.323 |
+| Random Forest | 1.353 | 2.264 | 0.710 | 1.437 |
+| DNN (hidden size 50) | 1.634 | 2.516 | 0.642 | 1.713 |
+| Decision Tree | 1.650 | 2.707 | 0.586 | 1.745 |
+
+**Observations**
+- The **tuned XGBoost is best on every test metric**. Compared with the DNN, its MAE is about 25% lower (1.23 against 1.63) and its RMSE about 22% lower. In pressure terms, a typical error is a factor of about $e^{1.23} \approx 3.4$, against $e^{1.63} \approx 5.1$ for the DNN.
+- **The ranking on the test set is the same as on the validation set** (tuned XGBoost, default XGBoost, Random Forest, DNN, Decision Tree), so the choices made on the validation set carried over to unseen compounds.
+- Tuning improved the test MAE by about 3% (1.270 to 1.230). The change of model family (DNN to XGBoost) was about ten times larger than the effect of tuning.
+- Every model has a slightly lower error on the test set than on the validation set, so the test compounds are a little easier than the validation compounds. This affects all models equally and does not change the comparison.
+- The DNN and the untuned decision tree have similar test MAE (1.634 and 1.650), and the DNN is better on RMSE (2.52 against 2.71).
+
+**Caveats**
+- Results come from a single split, so the small difference between default and tuned XGBoost (0.04 in MAE) may not be significant. The larger gaps (XGBoost against the DNN) are more convincing.
+- A test $R^2$ of 0.78 means the best model explains about 78% of the variance in $\ln P$ for unseen compounds. It is a useful estimate, but not precise.
+- The error analysis in `ERROR_ANALYSIS.md` was done for the DNN only. _Open questions: does the tuned XGBoost make the same large errors (for example for 2-methyl-3-ethyl-1-pentene, very low pressures, and the weak classes), or are those specific to the network?_
 ## 6. Conclusions and lessons learned
 
 _To fill in._
