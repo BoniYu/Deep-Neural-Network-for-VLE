@@ -1,19 +1,19 @@
 {
   "model": "XGBRegressor",
   "tuned_params": {
-    "colsample_bytree": 0.9484106149593443,
-    "learning_rate": 0.11661542364152026,
-    "max_depth": 6,
-    "min_child_weight": 7,
-    "n_estimators": 400,
-    "reg_lambda": 1.764396768338155,
-    "subsample": 0.7323592099410596
+    "colsample_bytree": 0.36998244107260203,
+    "learning_rate": 0.06936631172296444,
+    "max_depth": 7,
+    "min_child_weight": 4,
+    "n_estimators": 863,
+    "reg_lambda": 2.0034427927560734,
+    "subsample": 0.6225646316108401
   },
   "fixed_params": {
     "random_state": 42
   },
   "search": "RandomizedSearchCV, 30 iterations, GroupKFold(5) by compound name, scored by MAE",
-  "cv_MAE": 1.2981244195502908,
+  "cv_MAE": 1.3067781085081205,
   "input": "2048-bit topological fingerprint + temperature scaled with models/temperature_scaler.joblib",
   "target": "ln(P_vap), P in kPa",
   "valid_MAE": 1.272552,
