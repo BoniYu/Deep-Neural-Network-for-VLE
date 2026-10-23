@@ -467,3 +467,179 @@ tree.fit(X_train, y_train.ravel())
 | Fit time (here) | 8 to 41 s | 190 to 250 s | 4 to 6 s | not measured |
 | Test MAE | 1.650 | 1.353 | 1.230 (tuned) | 1.634 |
 | Test $R^2$ | 0.586 | 0.710 | 0.781 (tuned) | 0.642 |
+
+---
+
+## 6. Metrics used
+
+All metrics are computed on $\ln P_{vap}$ (with $P$ in kPa), comparing the **measured** values $y_i$ with the model's predictions $\hat{y}_i$ at the real data points, for $n$ rows. In scikit-learn the order of the arguments is always `(y_true, y_pred)`.
+
+### 6.1 MAE: mean absolute error (primary)
+
+$$
+\text{MAE} = \frac{1}{n}\sum_{i=1}^{n}\left|y_i - \hat{y}_i\right|
+$$
+
+The average size of the error, ignoring its direction. It is in the same units as the target, so it has a direct meaning here: an error of $x$ in $\ln P$ means the prediction is off by a factor of $e^{x}$ in the pressure. For example, an MAE of 1.23 is a typical factor of about $e^{1.23} \approx 3.4$. It treats all errors in proportion to their size, so it is not dominated by a few extreme values.
+
+### 6.2 RMSE: root mean squared error (primary)
+
+$$
+\text{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(y_i - \hat{y}_i\right)^2}
+$$
+
+Also in $\ln P$ units, but errors are **squared before averaging**, so large errors count much more. Always RMSE $\ge$ MAE. Looking at the two together shows how the errors are spread:
+- RMSE close to MAE: errors are of similar size.
+- RMSE much larger than MAE: a minority of predictions have very large errors. In this project the DNN had a test MAE of 1.63 and an RMSE of 2.52, which pointed to a few badly predicted compounds.
+
+The training loss of the network (MSE) is the square of the RMSE.
+
+### 6.3 $R^2$: coefficient of determination
+
+$$
+R^2 = 1 - \frac{\sum_i (y_i - \hat{y}_i)^2}{\sum_i (y_i - \bar{y})^2}
+$$
+
+The fraction of the variance of the target that the model explains, compared with always predicting the mean $\bar{y}$. A value of 1 is a perfect fit, 0 is no better than predicting the mean, and it can be **negative** for a model worse than the mean. It is unitless, so it is useful for comparing models, but it does not say how large the errors are in $\ln P$ units. It depends on the spread of the data, so it cannot be compared across different datasets.
+
+### 6.4 Bias: mean signed error
+
+$$
+\text{bias} = \frac{1}{n}\sum_{i=1}^{n}\left(\hat{y}_i - y_i\right)
+$$
+
+Used in the error analysis. Positive means the model over-predicts on average, and negative means it under-predicts. A bias close in size to the MAE means the errors are systematic (nearly all in one direction), and a bias near 0 with a large MAE means errors go both ways and cancel.
+
+### 6.5 MAPE: mean absolute percentage error (secondary only)
+
+$$
+\text{MAPE} = \frac{100}{n}\sum_{i=1}^{n}\left|\frac{y_i - \hat{y}_i}{y_i}\right|
+$$
+
+The book uses it to rank models, but it was only recorded as a secondary metric here. It divides each error by the **true value**, and $\ln P$ crosses zero (it ranges from about -27 to 10). Rows where $\ln P$ is close to 0 produce enormous percentage errors and dominate the average, so MAPE ranks models in a way that depends on those rows and not on the overall accuracy. In the hidden-size search it ranked size 50 last, while MSE, MAE and RMSE all ranked it first.
+
+(MAPE would make sense for the raw pressure $P$, which is always positive, but the target is $\ln P$.)
+
+### 6.6 Code
+
+```python
+import numpy as np
+from sklearn.metrics import mean_absolute_error as MAE
+from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import r2_score as R2
+
+def model_metrics(name, y_train, y_train_pred, y_valid, y_valid_pred, fit_time=None):
+    y_train, y_train_pred = np.ravel(y_train), np.ravel(y_train_pred)
+    y_valid, y_valid_pred = np.ravel(y_valid), np.ravel(y_valid_pred)
+    return {
+        "model": name,
+        "train_MAE": MAE(y_train, y_train_pred),
+        "train_RMSE": root_mean_squared_error(y_train, y_train_pred),
+        "train_R2": R2(y_train, y_train_pred),
+        "valid_MAE": MAE(y_valid, y_valid_pred),
+        "valid_RMSE": root_mean_squared_error(y_valid, y_valid_pred),
+        "valid_R2": R2(y_valid, y_valid_pred),
+        "fit_time_s": fit_time,
+    }
+```
+
+| Part | Meaning |
+|---|---|
+| `MAE(y_true, y_pred)` | Mean absolute error. |
+| `root_mean_squared_error` | RMSE directly. In older scikit-learn versions use `np.sqrt(mean_squared_error(...))`. Note that `np.sqrt(MAE(...))` is **not** the RMSE. |
+| `R2(y_true, y_pred)` | $R^2$. Unlike MAE and RMSE, the order of the arguments matters: swapping them changes the value. |
+| `np.ravel` | Flattens the arrays, so a column of shape `(n, 1)` and a flat `(n,)` array can be mixed without silent shape errors. |
+| Training and validation | Both are reported. A large gap between them shows overfitting (the default decision tree has a training MAE of 0.002 against a validation MAE of 1.745). |
+
+**Rules for using the metrics**
+- Compute them from the measured data and predictions at the **real data points**. Scoring the model against points of its own fitted line (the 100 points used to draw the line) gives a meaningless $R^2$ of 1.
+- Choose the primary metrics before comparing models, and use the same ones for every model. Here MAE and RMSE on $\ln P$ were chosen.
+- Models are chosen on the validation set (or cross-validation), and the **test set is used once at the end**.
+
+---
+
+## 7. Validation strategy: why GroupKFold and not KFold
+
+### 7.1 The data has a group structure
+
+Each compound appears in about 30 rows (one per temperature), and **all of its rows have the same fingerprint**. Rows are therefore not independent: the rows of a compound are 30 near-copies of the same input with a different temperature. What the model is meant to do is predict for **compounds it has never seen**, so every validation must keep whole compounds on one side.
+
+### 7.2 What goes wrong with ordinary KFold
+
+`KFold` splits the **rows** into folds, ignoring which compound they belong to. With about 30 rows per compound, almost every compound ends up with some rows in the training part and some in the validation part of each split. Then:
+
+- **Data leakage.** The model has seen the same fingerprint (with a neighboring temperature and a similar pressure) during training. To predict the validation row it only needs to recognize the molecule and interpolate over temperature, which is far easier than predicting for a new molecule.
+- **Optimistic scores.** The cross-validated error is much lower than the error on genuinely new compounds, so it says little about how the model will do on the test set or in the app.
+- **Wrong choices in tuning.** Settings that favor memorizing compounds (deep trees, weak regularization, many trees, a low `min_child_weight`) look best, even though they generalize worse. A search driven by `KFold` can pick exactly those.
+
+The same reasoning is why the train/validation/test split was made by compound name and not by row.
+
+### 7.3 What GroupKFold does
+
+`GroupKFold` takes a **group label** for each row (here the compound name) and makes sure that **all rows of a group are in the same fold**. In every split, the validation fold contains only compounds that were absent from the training folds, which reproduces the real task.
+
+| | KFold | GroupKFold |
+|---|---|---|
+| Splits by | rows | groups (compounds) |
+| Same compound in train and validation | yes, almost always | never |
+| Estimates | error on new rows of known compounds | error on **new compounds** |
+| Needs | nothing | a `groups` array, one label per row, in the same order as `X` |
+| Score compared with the test set | too optimistic | realistic |
+
+**Details**
+- The `groups` array must have the same length and order as `X_train` (here `df_train['Name']`). If it doesn't line up, the split is silently wrong.
+- `GroupKFold` is **deterministic** (no shuffling). It assigns groups to folds so that the folds have similar numbers of rows.
+- It does not stratify by chemical class. The train/validation/test split did (class by class), but in `GroupKFold` a fold could end up with few compounds of a rare class. There is also `StratifiedGroupKFold`, which tries to keep a class label balanced across folds as well, if that matters.
+- With 5 folds, each split trains on about 80% of the compounds and validates on about 20%, so every fit is repeated 5 times per parameter combination.
+
+### 7.4 Code
+
+```python
+from sklearn.model_selection import GroupKFold, RandomizedSearchCV
+
+groups_train = df_train['Name'].to_numpy()
+assert len(groups_train) == len(X_train)       # one group label per row, same order
+
+search = RandomizedSearchCV(
+    estimator=XGBRegressor(random_state=42, n_jobs=-1),
+    param_distributions=param_distributions,
+    n_iter=30,
+    scoring={"MAE": "neg_mean_absolute_error", "RMSE": "neg_root_mean_squared_error"},
+    refit="MAE",
+    cv=GroupKFold(n_splits=5),
+)
+search.fit(X_train, y_train.ravel(), groups=groups_train)    # groups are passed to fit
+```
+
+A check that shows the difference directly:
+
+```python
+from sklearn.model_selection import KFold
+
+for tr, va in KFold(5, shuffle=True, random_state=0).split(X_train):
+    print("KFold, compounds in both train and validation:",
+          len(set(groups_train[tr]) & set(groups_train[va])))
+
+for tr, va in GroupKFold(5).split(X_train, y_train, groups_train):
+    print("GroupKFold, compounds in both:",
+          len(set(groups_train[tr]) & set(groups_train[va])))
+```
+
+With `KFold` the overlap should be nearly all of the compounds, and with `GroupKFold` it should be exactly 0.
+
+| Part | Meaning |
+|---|---|
+| `GroupKFold(n_splits=5)` | The splitter. Its `split(X, y, groups)` yields the row positions of the training and validation parts. |
+| `groups=` | The group label of each row. If you forget it, scikit-learn raises an error, which is useful, since the alternative would be to split by row without telling you. |
+| `cv=` | The cross-validation scheme of the search. Passing the splitter object here is what makes the search group-aware. |
+| `scoring` / `refit` | The metrics to compute, and which one chooses the winning parameters. The `neg_` prefix flips the sign, because scikit-learn treats higher as better. |
+
+### 7.5 How the three sets are used in this project
+
+| Set | Rows | Used for |
+|---|---|---|
+| Train | 26,310 | fitting the models, and (with `GroupKFold`) the tuning search |
+| Validation | 6,810 | comparing models, choosing the DNN size, early stopping, checking the tuned model |
+| Test | 8,610 | **one** final evaluation of the chosen models |
+
+All three were split by compound within each chemical class. Cross-validation was used only for the XGBoost search, so the fixed validation set stayed a clean check afterwards. Cross-validated and validation scores are close (1.298 and 1.273 for the tuned XGBoost), which suggests the result does not depend on one particular split.
