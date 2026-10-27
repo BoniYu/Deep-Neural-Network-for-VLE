@@ -67,7 +67,7 @@ The data folder is not tracked by git. Download both files into `data/` before r
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # macOS / Linux
-pip install -r requirements.txt
+pip install -r requirements-notebooks.txt
 ```
 
 Main packages: `torch`, `numpy`, `pandas`, `scikit-learn`, `xgboost`, `rdkit`, `datamol`, `matplotlib`, `seaborn`, `scipy`, `joblib`, `tqdm`.
@@ -127,6 +127,6 @@ Enter a molecule as a SMILES string and a temperature in K, and the app predicts
 
 **Run it locally**
 ```
-pip install -r requirements.txt
+install -r requirements-notebooks.txt
 streamlit run app/streamlit_app.py
 ```
