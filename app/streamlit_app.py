@@ -31,8 +31,11 @@ def load_model_and_scaler():
 
 model, scaler = load_model_and_scaler()
 st.title(" Vapor Pressure Prediction from SMILES and temperature")
-smiles_string = st.text_input("Enter the SMILES: ", placeholder="e.g. CCO for ethanol")
-temp_input = st.number_input("Enter temperature in K: ", min_value = 80.0, max_value = 1000.0, value = 298.15, step = 1.0)
+col1, col2 = st.columns(2)
+with col1:
+    smiles_string = st.text_input("Enter the SMILES: ", placeholder="e.g. CCO for ethanol")
+with col2:    
+    temp_input = st.number_input("Enter temperature in K: ", min_value = 80.0, max_value = 1000.0, value = 298.15, step = 1.0)
 
 # Check for an empty string
 if not smiles_string:

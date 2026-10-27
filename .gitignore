@@ -8,3 +8,5 @@ models/*
 !models/dnn_vle.pt
 !models/temperature_scaler.joblib
 !models/config.json
+!models/xgb_tuned.json
+!models/xgb_config.json
