@@ -72,3 +72,51 @@ def build_input(fingerprint, temperature_K, scaler):
     T_scaled = scaler.transform([[temperature_K]])            # shape (1, 1)
     X = np.hstack((fingerprint.reshape(1, -1), T_scaled))     # shape (1, 2049)
     return X
+
+from xgboost import XGBRegressor
+import numpy as np
+model = XGBRegressor()
+# model.load_model("../models/models/xgb_tuned.json")
+
+def predict_pressure(X, model):
+    """Predicts the pressure and give two output in lnP and P
+
+    Args:
+        X : array of 2049 values from `mol_to_fingerprint` and temperature.
+        model: the best model that was saved which is XGBoost in this case
+
+    Returns:
+        ln_p : tha raw value of the prediction
+        the pressure value after the conversion, kPa    
+    """
+    ln_p = model.predict(X)[0]
+    return ln_p, float(np.exp(ln_p))
+
+def predict_from_smiles(smiles, temperature_K, model, scaler, min_bits=1):
+    """Predict the vapor pressure of a molecule at a given temperature.
+
+    Args:
+        smiles: SMILES string of the molecule.
+        temperature_K: temperature in Kelvin.
+        model: the fitted XGBoost model.
+        scaler: the fitted temperature scaler.
+        min_bits: minimum set bits for the fingerprint to be considered reliable.
+
+    Returns:
+        Dictionary with the pressure in kPa, ln P, the number of set
+        fingerprint bits, and a flag that is True when the prediction
+        should not be trusted (too few bits).
+
+    Raises:
+        ValueError: If the SMILES string is invalid.
+    """
+    mol = smiles_to_mol(smiles)
+    fingerprint = mol_to_fingerprint(mol)
+    X = build_input(fingerprint, temperature_K, scaler)
+    ln_p, p = predict_pressure(X, model)
+    return {
+        "pressure_kPa": float(p),
+        "ln_p": float(ln_p),
+        "n_bits": int(fingerprint.sum()),
+        "warn": bool(too_few_bits(fingerprint, min_bits)),
+    }
