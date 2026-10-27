@@ -113,3 +113,20 @@ MIT, see [LICENSE](LICENSE).
 ## Acknowledgments
 
 Tutorial and datasets from the [MLCE book](https://edgarsmdn.github.io/MLCE_book/) by Edgar Sanchez Medina, Antonio del Rio Chanona and Caroline Ganzer.
+
+## Live demo
+
+Try the app: **https://vle-vapor-pressure.streamlit.app**
+
+Enter a molecule as a SMILES string and a temperature in K, and the app predicts its vapor pressure in kPa using the tuned XGBoost model (test MAE 1.23 on ln P). It also plots the vapor pressure curve over a temperature range you choose.
+
+**Limitations**
+- Very small molecules (for example ethanol or methane) give an empty fingerprint, so the model cannot tell them apart. The app shows a warning for these, and the number should not be trusted.
+- Predictions are weakest for very low pressures and for classes that are rare in the training data, such as inorganics, amides and acids.
+- The app takes SMILES strings only (compound names are planned).
+
+**Run it locally**
+```
+pip install -r requirements.txt
+streamlit run app/streamlit_app.py
+```
