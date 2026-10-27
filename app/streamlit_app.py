@@ -24,7 +24,7 @@ def load_model_and_scaler():
     """Load the tuned XGBoost model and the temperature scaler (once)."""
     print("loading model")
     model = XGBRegressor()
-    model.load_model(ROOT / "models" / "models" / "xgb_tuned.json")
+    model.load_model(ROOT / "models" / "xgb_tuned.json")
     scaler = joblib.load(ROOT / "models" / "temperature_scaler.joblib")
     return model, scaler
 
